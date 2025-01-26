@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech to Text</title>
+</head>
+<body>
+    <h1>Upload Audio for Transcription(Only Mp3 files allowed)</h1>
+    <input type="file" id="audio-file" accept="audio/*" />
+    <button onclick="uploadAudio()">Upload and Transcribe</button>
+    <p id="output"></p>
+
+    <script>
+        const outputDiv = document.getElementById('output');
+        const apiKey = '9de15efff8e44409817b3c6ac99d417b';  // Replace with your AssemblyAI API key
+
+        async function uploadAudio() {
+            const fileInput = document.getElementById('audio-file');
+            const file = fileInput.files[0];
+            if (!file) {
+                outputDiv.textContent = 'Please select a file to upload.';
+                return;
+            }
+
+            outputDiv.textContent = 'Uploading file...';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                // Upload file to AssemblyAI
+                const uploadResponse = await fetch('https://api.assemblyai.com/v2/upload', {
+                    method: 'POST',
+                    headers: {
+                        'authorization': apiKey
+                    },
+                    body: formData
+                });
+
+                const uploadData = await uploadResponse.json();
+                console.log('Upload Response:', uploadData);  // Log upload response
+
+                if (uploadData.error) {
+                    outputDiv.textContent = `Error uploading file: ${uploadData.error}`;
+                    return;
+                }
+
+                const audioUrl = uploadData.upload_url;
+                outputDiv.textContent = 'File uploaded. Requesting transcription...';
+
+                // Request transcription
+                const transcriptRequest = await fetch('https://api.assemblyai.com/v2/transcript', {
+                    method: 'POST',
+                    headers: {
+                        'authorization': apiKey,
+                        'content-type': 'application/json'
+                    },
+                    body: JSON.stringify({ audio_url: audioUrl })
+                });
+
+                const transcriptData = await transcriptRequest.json();
+                console.log('Transcript Request Response:', transcriptData);  // Log transcript request response
+
+                if (transcriptData.error) {
+                    outputDiv.textContent = `Error requesting transcription: ${transcriptData.error}`;
+                    return;
+                }
+
+                const transcriptId = transcriptData.id;
+                outputDiv.textContent = 'Transcription in progress...';
+                checkTranscriptStatus(transcriptId);
+
+            } catch (error) {
+                console.error('Error during file upload or transcription request:', error);
+                outputDiv.textContent = 'An error occurred. Please try again.';
+            }
+        }
+
+        async function checkTranscriptStatus(transcriptId) {
+            try {
+                // Polling for the transcription status
+                const resultResponse = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+                    method: 'GET',
+                    headers: {
+                        'authorization': apiKey
+                    }
+                });
+
+                const resultData = await resultResponse.json();
+                console.log('Polling result:', resultData);  // Log the transcription status
+
+                if (resultData.status === 'completed') {
+                    outputDiv.textContent = `Transcription completed: ${resultData.text}`;
+                } else if (resultData.status === 'failed') {
+                    outputDiv.textContent = 'Transcription failed. Please try again.';
+                } else {
+                    console.log('Transcription in progress...');
+                    setTimeout(() => checkTranscriptStatus(transcriptId), 5000);  // Retry in 5 seconds
+                }
+
+            } catch (error) {
+                console.error('Error fetching transcription status:', error);
+                outputDiv.textContent = 'An error occurred while checking transcription status.';
+            }
+        }
+    </script>
+</body>
+</html>
